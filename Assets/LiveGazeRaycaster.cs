@@ -15,12 +15,12 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
 
     [Header("Temporary gaze input")]
     [Tooltip("Use the centre of the subject view instead of EyeLink data.")]
-    [SerializeField] private bool useDummyCenterGaze = true;
+    [SerializeField] private bool useDummyCenterGaze = false;
     [Tooltip("Continue displaying the last valid EyeLink sample between tracker updates.")]
     [SerializeField] private bool keepLastValidSample = true;
 
     [Header("Mini-camera overlay")]
-    [SerializeField] private bool showGazeArea = true;
+    [SerializeField] private bool showGazeArea = false;
     [SerializeField] private float gazeAreaRadiusPixels = 42f;
     [SerializeField] private Color hitAreaColor = new Color(0.15f, 1f, 0.35f, 1f);
     [SerializeField] private Color missAreaColor = new Color(1f, 0.75f, 0.1f, 1f);
