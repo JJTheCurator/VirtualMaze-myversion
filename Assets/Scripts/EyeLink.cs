@@ -56,6 +56,17 @@ public static class EyeLink
     public static bool IsRecording { get; private set; }
     public static bool HasGazeSample { get; private set; }
     public static GazeSample LatestGazeSample { get; private set; }
+    public static string LocalEdfPath
+    {
+        get
+        {
+            if (String.IsNullOrEmpty(localEdfPath)) {
+                localEdfPath = CreateDefaultLocalEdfPath();
+            }
+
+            return localEdfPath;
+        }
+    }
     public static string LastDownloadedEdf { get; private set; } = String.Empty;
 
     public static ELink eyelink;
@@ -69,6 +80,11 @@ public static class EyeLink
     private static int eyeLinkTrialNumber;
     private static double lastSampleTime = Double.MinValue;
     private static string remoteEdfName = String.Empty;
+    private static string localEdfPath = String.Empty;
+
+    private const int EnterKey = 0x000D;
+    private const short NoKeyModifiers = 0;
+    private const short KeyPress = 10;
 
     /// <summary>
     /// Unity invokes this once before loading the first scene. This is the only
@@ -118,7 +134,6 @@ public static class EyeLink
             if (!openDummy) {
                 ConfigureTracker();
                 OpenDataFile();
-                Calibrate();
             }
         }
         catch (Exception exception) {
@@ -137,78 +152,81 @@ public static class EyeLink
         }
     }
 
-    /// <summary>
-    /// Runs camera setup and calibration in a temporary window on the Unity PC.
-    /// </summary>
+    /// <summary>Starts calibration directly from the EyeLink setup screen.</summary>
+    public static bool Calibration()
+    {
+        return RunTrackerSetupMode("calibration", 'c', false);
+    }
+
+    /// <summary>Runs drift detection/correction at the center of the display.</summary>
+    public static bool DriftDetection()
+    {
+        return RunCalibrationWindow("drift detection", delegate(int width, int height) {
+            eyelink.doDriftCorrect(
+                (short)(width / 2),
+                (short)(height / 2),
+                true,
+                true);
+        });
+    }
+
+    /// <summary>Starts validation directly from the EyeLink setup screen.</summary>
+    public static bool Validation()
+    {
+        return RunTrackerSetupMode("validation", 'v', false);
+    }
+
+    /// <summary>Opens the EyeLink camera image/setup screen.</summary>
+    public static bool CameraSetup()
+    {
+        return RunTrackerSetupMode("camera setup", EnterKey, true);
+    }
+
+    /// <summary>Compatibility wrapper retained for existing UI/code.</summary>
     public static bool Calibrate()
     {
-        if (!EnsureConnected("calibrate")) {
+        return Calibration();
+    }
+
+    /// <summary>
+    /// Sets the exact local EDF destination. Selecting a directory generates a
+    /// timestamped EDF filename inside it.
+    /// </summary>
+    public static bool TrySetLocalEdfPath(string requestedPath, out string resolvedPath)
+    {
+        resolvedPath = LocalEdfPath;
+        if (String.IsNullOrWhiteSpace(requestedPath)) {
             return false;
         }
 
-        if (openDummy) {
-            Debug.Log("[EyeLink] Calibration skipped in dummy mode.");
-            return true;
-        }
-
         try {
-            StopRecording();
-            IntPtr unityWindow = GetActiveWindow();
-            if (unityWindow == IntPtr.Zero) {
-                throw new InvalidOperationException(
-                    "Unity does not have an active window for the calibration display.");
+            string trimmedPath = requestedPath.Trim().Trim('"');
+            string fullPath = Path.GetFullPath(trimmedPath);
+            bool directorySelected = Directory.Exists(fullPath) ||
+                trimmedPath.EndsWith(Path.DirectorySeparatorChar.ToString()) ||
+                trimmedPath.EndsWith(Path.AltDirectorySeparatorChar.ToString()) ||
+                String.IsNullOrEmpty(Path.GetExtension(fullPath));
+
+            if (directorySelected) {
+                fullPath = Path.Combine(fullPath, CreateLocalEdfFileName());
+            }
+            else if (!String.Equals(
+                Path.GetExtension(fullPath), ".edf", StringComparison.OrdinalIgnoreCase)) {
+                return false;
             }
 
-            using (EyeLinkCalibrationWindow calibrationWindow =
-                new EyeLinkCalibrationWindow(unityWindow)) {
-                calibrationWindow.ShowForCalibration();
-
-                int width = calibrationWindow.ClientSize.Width;
-                int height = calibrationWindow.ClientSize.Height;
-                int right = Math.Max(0, width - 1);
-                int bottom = Math.Max(0, height - 1);
-
-                if (width != Screen.width || height != Screen.height) {
-                    Debug.LogWarning(
-                        "[EyeLink] The local calibration window is " + width + "x" + height +
-                        ", but Unity is rendering at " + Screen.width + "x" + Screen.height +
-                        ". Use a fullscreen standalone build so gaze and stimulus " +
-                        "coordinates remain aligned.");
-                }
-
-                eyelink.setOfflineMode();
-                eyelink.sendCommand(
-                    "screen_pixel_coords = 0 0 " + right + " " + bottom);
-                eyelink.sendMessage(
-                    "DISPLAY_COORDS 0 0 " + right + " " + bottom);
-                eyelinkUtil.pumpDelay(50);
-
-                SREYELINKLib.ELGDICal cal = eyelinkUtil.getGDICal();
-                cal.setCalibrationWindow(calibrationWindow.Handle.ToInt32());
-                cal.enableKeyCollection(true);
-
-                try {
-                    eyelink.doTrackerSetup();
-                    eyelinkUtil.pumpDelay(1500);
-                    eyelink.doDriftCorrect(
-                        (short)(width / 2),
-                        (short)(height / 2),
-                        true,
-                        true);
-                }
-                finally {
-                    // The calibration window is about to be destroyed, so its
-                    // associated keyboard collection must also be stopped.
-                    cal.enableKeyCollection(false);
-                }
+            string outputFolder = Path.GetDirectoryName(fullPath);
+            if (String.IsNullOrEmpty(outputFolder)) {
+                return false;
             }
 
-            Debug.Log("[EyeLink] Local tracker setup/calibration finished.");
-
+            Directory.CreateDirectory(outputFolder);
+            localEdfPath = fullPath;
+            resolvedPath = localEdfPath;
             return true;
         }
         catch (Exception exception) {
-            Debug.LogError("[EyeLink] Calibration failed: " + exception.Message);
+            Debug.LogWarning("[EyeLink] Invalid local EDF path: " + exception.Message);
             return false;
         }
     }
@@ -612,6 +630,116 @@ public static class EyeLink
         eyelinkUtil.pumpDelay(50);
     }
 
+    private static bool RunTrackerSetupMode(
+        string operation,
+        int setupKey,
+        bool startInCameraMode)
+    {
+        return RunCalibrationWindow(operation, delegate(int width, int height) {
+            eyelink.setTrackerSetupDefault((short)(startInCameraMode ? 1 : 0));
+
+            try {
+                if (startInCameraMode) {
+                    eyelink.doTrackerSetup();
+                    return;
+                }
+
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+                // doTrackerSetup owns the native message loop. A WinForms timer
+                // injects the requested setup key after that loop has started.
+                using (System.Windows.Forms.Timer setupTimer =
+                    new System.Windows.Forms.Timer()) {
+                    setupTimer.Interval = 100;
+                    setupTimer.Tick += delegate {
+                        if (!eyelink.inSetup()) {
+                            return;
+                        }
+
+                        setupTimer.Stop();
+                        eyelink.sendKeybutton(setupKey, NoKeyModifiers, KeyPress);
+                    };
+                    setupTimer.Start();
+                    eyelink.doTrackerSetup();
+                }
+#endif
+            }
+            finally {
+                eyelink.setTrackerSetupDefault(0);
+            }
+        });
+    }
+
+    private static bool RunCalibrationWindow(
+        string operation,
+        Action<int, int> trackerAction)
+    {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+        if (!EnsureConnected(operation)) {
+            return false;
+        }
+
+        if (openDummy) {
+            Debug.Log("[EyeLink] " + operation + " skipped in dummy mode.");
+            return true;
+        }
+
+        try {
+            StopRecording();
+            IntPtr unityWindow = GetActiveWindow();
+            if (unityWindow == IntPtr.Zero) {
+                throw new InvalidOperationException(
+                    "Unity does not have an active window for the EyeLink setup display.");
+            }
+
+            using (EyeLinkCalibrationWindow calibrationWindow =
+                new EyeLinkCalibrationWindow(unityWindow)) {
+                calibrationWindow.ShowForCalibration();
+
+                int width = calibrationWindow.ClientSize.Width;
+                int height = calibrationWindow.ClientSize.Height;
+                int right = Math.Max(0, width - 1);
+                int bottom = Math.Max(0, height - 1);
+
+                if (width != Screen.width || height != Screen.height) {
+                    Debug.LogWarning(
+                        "[EyeLink] The local setup window is " + width + "x" + height +
+                        ", but Unity is rendering at " + Screen.width + "x" + Screen.height +
+                        ". Use a fullscreen standalone build so gaze and stimulus " +
+                        "coordinates remain aligned.");
+                }
+
+                eyelink.setOfflineMode();
+                eyelink.sendCommand(
+                    "screen_pixel_coords = 0 0 " + right + " " + bottom);
+                eyelink.sendMessage(
+                    "DISPLAY_COORDS 0 0 " + right + " " + bottom);
+                eyelinkUtil.pumpDelay(50);
+
+                SREYELINKLib.ELGDICal cal = eyelinkUtil.getGDICal();
+                cal.setCalibrationWindow(calibrationWindow.Handle.ToInt32());
+                cal.enableKeyCollection(true);
+
+                try {
+                    trackerAction(width, height);
+                }
+                finally {
+                    cal.enableKeyCollection(false);
+                }
+            }
+
+            Debug.Log("[EyeLink] " + operation + " finished.");
+            return true;
+        }
+        catch (Exception exception) {
+            Debug.LogError("[EyeLink] " + operation + " failed: " + exception.Message);
+            return false;
+        }
+#else
+        Debug.LogWarning("[EyeLink] " + operation + " is only supported on Windows.");
+        return false;
+#endif
+    }
+
     private static bool EnsureConnected(string action)
     {
         if (!TryGetEyelinkConnectedStatus())
@@ -665,11 +793,24 @@ public static class EyeLink
 
     private static string BuildLocalEdfPath()
     {
-        string outputFolder = Path.Combine(Application.persistentDataPath, "EyeLinkData");
+        string path = LocalEdfPath;
+        string outputFolder = Path.GetDirectoryName(path);
         Directory.CreateDirectory(outputFolder);
-        string localName = Path.GetFileNameWithoutExtension(remoteEdfName) + "_" +
-            DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".edf";
-        return Path.Combine(outputFolder, localName);
+        return path;
+    }
+
+    private static string CreateDefaultLocalEdfPath()
+    {
+        string outputFolder = Path.Combine(Application.persistentDataPath, "EyeLinkData");
+        return Path.Combine(outputFolder, CreateLocalEdfFileName());
+    }
+
+    private static string CreateLocalEdfFileName()
+    {
+        string baseName = String.IsNullOrEmpty(remoteEdfName)
+            ? NormalizeEdfBaseName(edfBaseName)
+            : Path.GetFileNameWithoutExtension(remoteEdfName);
+        return baseName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".edf";
     }
 
     private static string SanitizeLine(string value)

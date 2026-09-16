@@ -47,6 +47,7 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
     private GUIStyle statusStyle;
     private GameObject lastLoggedObject;
     private bool warnedAboutMissingCamera;
+    private SREYELINKLib.EL_DATA_TYPE currentEyeLinkDataType;
 
     private void Awake()
     {
@@ -138,6 +139,7 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
         viewportGaze = new Vector2(
             sample.unityPixels.x / Screen.width,
             sample.unityPixels.y / Screen.height);
+        currentEyeLinkDataType = sample.eltype;
 
         return viewportGaze.x >= 0f && viewportGaze.x <= 1f &&
             viewportGaze.y >= 0f && viewportGaze.y <= 1f;
@@ -275,7 +277,9 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
         if (showRayStatus)
         {
             EnsureStatusStyle();
-            string source = useDummyCenterGaze ? "DUMMY CENTER" : "EYELINK";
+            string source = useDummyCenterGaze
+                ? "DUMMY CENTER"
+                : currentEyeLinkDataType.ToString();
             string hitText = CurrentObject == null
                 ? "RAY: NO HIT"
                 : "RAY: " + CurrentObject.name + " (" +

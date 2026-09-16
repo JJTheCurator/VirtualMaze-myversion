@@ -89,6 +89,16 @@ public class LevelController : MonoBehaviour {
     [Tooltip("Seconds of continuous valid gaze on the cue required before it is hidden.")]
     private float cueGazeDuration = 1f;
 
+    /// <summary>
+    /// Continuous valid gaze required before the cue is hidden, exposed in
+    /// milliseconds for the EyeLink settings UI.
+    /// </summary>
+    public float RequiredCueGazeMilliseconds
+    {
+        get { return cueGazeDuration * 1000f; }
+        set { cueGazeDuration = Mathf.Max(0f, value) / 1000f; }
+    }
+
     [SerializeField]
     private ParallelPort parallelPort = null;
 
@@ -381,39 +391,44 @@ public class LevelController : MonoBehaviour {
         cueController.ShowCue();
         onSessionTrigger.Invoke(SessionTrigger.TrialStartedTrigger, targetIndex);
 
-        //yield return new WaitForSecondsRealtime(3f); // Wait time for showing cue before minimising
+        double requiredCueGazeMilliseconds = RequiredCueGazeMilliseconds;
+        if (EyeLink.openDummy || !EyeLink.IsRecording) {
+            // Keep the cue flow usable while developing without tracker data.
+            yield return new WaitForSecondsRealtime(
+                (float)(requiredCueGazeMilliseconds / 1000.0));
+        }
+        else {
+            double cueGazeStartTrackerTime = double.NaN;
+            while (true) {
+                EyeLink.GazeSample sample;
+                bool hasNewSample = EyeLink.TryGetLatestSample(out sample);
 
-        double cueGazeStartTrackerTime = double.NaN;
-        double requiredCueGazeMilliseconds = cueGazeDuration * 1000.0;
-        while (true) {
-            EyeLink.GazeSample sample;
-            bool hasNewSample = EyeLink.TryGetLatestSample(out sample);
+                if (!hasNewSample) {
+                    // Rendering can run faster than new samples arrive. Do not
+                    // reset the dwell when this frame has no new tracker data.
+                    yield return null;
+                    continue;
+                }
 
-            if (!hasNewSample) {
-                // Rendering can run faster than new samples arrive. Do not reset
-                // the dwell merely because this frame has no new tracker data.
+                bool isLookingAtCue = sample.isValid &&
+                    cueController.IsScreenPointInsideCue(sample.unityPixels);
+
+                if (!isLookingAtCue) {
+                    cueGazeStartTrackerTime = double.NaN;
+                }
+                else if (double.IsNaN(cueGazeStartTrackerTime) ||
+                    sample.trackerTime < cueGazeStartTrackerTime) {
+                    // Start a new continuous dwell. The less-than check handles
+                    // the EyeLink millisecond clock wrapping or being reset.
+                    cueGazeStartTrackerTime = sample.trackerTime;
+                }
+                else if (sample.trackerTime - cueGazeStartTrackerTime >=
+                    requiredCueGazeMilliseconds) {
+                    break;
+                }
+
                 yield return null;
-                continue;
             }
-
-            bool isLookingAtCue = sample.isValid &&
-                cueController.IsScreenPointInsideCue(sample.unityPixels);
-
-            if (!isLookingAtCue) {
-                cueGazeStartTrackerTime = double.NaN;
-            }
-            else if (double.IsNaN(cueGazeStartTrackerTime) ||
-                sample.trackerTime < cueGazeStartTrackerTime) {
-                // Start a new continuous dwell. The less-than check also handles
-                // the EyeLink millisecond clock wrapping or being reset.
-                cueGazeStartTrackerTime = sample.trackerTime;
-            }
-            else if (sample.trackerTime - cueGazeStartTrackerTime >=
-                requiredCueGazeMilliseconds) {
-                break;
-            }
-
-            yield return null;
         }
 
         cueController.HideCue();
