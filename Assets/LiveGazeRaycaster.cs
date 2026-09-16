@@ -20,7 +20,7 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
     [SerializeField] private bool keepLastValidSample = true;
 
     [Header("Mini-camera overlay")]
-    [SerializeField] private bool showGazeArea = true;
+    [SerializeField] private bool showGazeArea = false;
     [SerializeField] private float gazeAreaRadiusPixels = 42f;
     [SerializeField] private Color hitAreaColor = new Color(0.15f, 1f, 0.35f, 1f);
     [SerializeField] private Color missAreaColor = new Color(1f, 0.75f, 0.1f, 1f);
@@ -47,6 +47,7 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
     private GUIStyle statusStyle;
     private GameObject lastLoggedObject;
     private bool warnedAboutMissingCamera;
+    private SREYELINKLib.EL_DATA_TYPE currentEyeLinkDataType;
 
     private void Awake()
     {
@@ -138,6 +139,7 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
         viewportGaze = new Vector2(
             sample.unityPixels.x / Screen.width,
             sample.unityPixels.y / Screen.height);
+        currentEyeLinkDataType = sample.eltype;
 
         return viewportGaze.x >= 0f && viewportGaze.x <= 1f &&
             viewportGaze.y >= 0f && viewportGaze.y <= 1f;
@@ -275,7 +277,9 @@ public sealed class LiveGazeRaycaster : MonoBehaviour
         if (showRayStatus)
         {
             EnsureStatusStyle();
-            string source = useDummyCenterGaze ? "DUMMY CENTER" : "EYELINK";
+            string source = useDummyCenterGaze
+                ? "DUMMY CENTER"
+                : currentEyeLinkDataType.ToString();
             string hitText = CurrentObject == null
                 ? "RAY: NO HIT"
                 : "RAY: " + CurrentObject.name + " (" +
