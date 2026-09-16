@@ -8,6 +8,7 @@ using ELink = SREYELINKLib.EyeLink;
 using ELinkUtil = SREYELINKLib.EyeLinkUtil;
 using Eye = SREYELINKLib.EL_EYE;
 using Eltype = SREYELINKLib.EL_DATA_TYPE;
+
 //using ALLF_DATA = SREYELINKLib.ALLF_DATA;
 
 
@@ -25,7 +26,6 @@ public static class EyeLink
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
 #endif
-
     public struct GazeSample
     {
         public double trackerTime;
@@ -118,7 +118,7 @@ public static class EyeLink
             if (!openDummy) {
                 ConfigureTracker();
                 OpenDataFile();
-                Calibrate();
+                //Calibrate();
             }
         }
         catch (Exception exception) {
@@ -190,11 +190,11 @@ public static class EyeLink
                 try {
                     eyelink.doTrackerSetup();
                     eyelinkUtil.pumpDelay(1500);
-                    eyelink.doDriftCorrect(
-                        (short)(width / 2),
-                        (short)(height / 2),
-                        true,
-                        true);
+                    //eyelink.doDriftCorrect(
+                    //    (short)(width / 2),
+                    //    (short)(height / 2),
+                    //    true,
+                    //    true);
                 }
                 finally {
                     // The calibration window is about to be destroyed, so its
@@ -601,8 +601,8 @@ public static class EyeLink
         int bottom = Math.Max(0, Screen.height - 1);
 
         eyelink.setOfflineMode();
-        eyelink.sendCommand("screen_pixel_coords = 0 0 " + right + " " + bottom);
-        eyelink.sendCommand("calibration_type = HV9");
+        //eyelink.sendCommand("screen_pixel_coords = 0 0 " + right + " " + bottom);
+        //eyelink.sendCommand("calibration_type = HV9");
         eyelink.sendCommand(
             "file_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT");
         eyelink.sendCommand(

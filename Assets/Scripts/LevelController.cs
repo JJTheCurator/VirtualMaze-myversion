@@ -396,16 +396,19 @@ public class LevelController : MonoBehaviour {
                 continue;
             }
 
-            bool isLookingAtCue = sample.isValid &&
+            bool isLookingAtCue = sample.isValid && 
                 cueController.IsScreenPointInsideCue(sample.unityPixels);
 
-            if (!isLookingAtCue) {
+            if (!isLookingAtCue || sample.eltype == SREYELINKLib.EL_DATA_TYPE.EL_ENDFIX) {
                 cueGazeStartTrackerTime = double.NaN;
             }
-            else if (double.IsNaN(cueGazeStartTrackerTime) ||
-                sample.trackerTime < cueGazeStartTrackerTime) {
+            else if (double.IsNaN(cueGazeStartTrackerTime) && sample.eltype == SREYELINKLib.EL_DATA_TYPE.EL_STARTFIX) {
                 // Start a new continuous dwell. The less-than check also handles
                 // the EyeLink millisecond clock wrapping or being reset.
+                cueGazeStartTrackerTime = sample.trackerTime;
+            }
+            else if (sample.trackerTime < cueGazeStartTrackerTime && sample.eltype == SREYELINKLib.EL_DATA_TYPE.EL_FIXUPDATE)
+            {
                 cueGazeStartTrackerTime = sample.trackerTime;
             }
             else if (sample.trackerTime - cueGazeStartTrackerTime >=
