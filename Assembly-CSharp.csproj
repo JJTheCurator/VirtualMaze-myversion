@@ -106,7 +106,6 @@
      <Compile Include="Assets\Scripts\ExperimentLogger.cs" />
      <Compile Include="Assets\Scripts\Extensions.cs" />
      <Compile Include="Assets\Scripts\EyeLink.cs" />
-     <Compile Include="Assets\Scripts\EyeLinkCalibrationWindow.cs" />
      <Compile Include="Assets\Scripts\FileBrowser.cs" />
      <Compile Include="Assets\Scripts\FileItem.cs" />
      <Compile Include="Assets\Scripts\FileWriter.cs" />
@@ -114,7 +113,6 @@
      <Compile Include="Assets\Scripts\GazePointPool.cs" />
      <Compile Include="Assets\Scripts\GUIControllers\BasicGUIController.cs" />
      <Compile Include="Assets\Scripts\GUIControllers\Console.cs" />
-     <Compile Include="Assets\Scripts\GUIControllers\EyeLinkGUIController.cs" />
      <Compile Include="Assets\Scripts\GUIControllers\ExperimentGUIController.cs" />
      <Compile Include="Assets\Scripts\GUIControllers\GuiController.cs" />
      <Compile Include="Assets\Scripts\GUIControllers\JoystickGUIController.cs" />
@@ -833,12 +831,6 @@
  </Reference>
  <Reference Include="Interop.SREYELINKLib">
  <HintPath>E:/SITE/CODE/git/VirtualMaze/Assets/Plugins/Interop.SREYELINKLib.dll</HintPath>
- </Reference>
- <Reference Include="System.Drawing">
- <HintPath>C:/Program Files/Unity/Hub/Editor/2019.2.19f1/Editor/Data/MonoBleedingEdge/lib/mono/4.7.1-api/System.Drawing.dll</HintPath>
- </Reference>
- <Reference Include="System.Windows.Forms">
- <HintPath>C:/Program Files/Unity/Hub/Editor/2019.2.19f1/Editor/Data/MonoBleedingEdge/lib/mono/4.7.1-api/System.Windows.Forms.dll</HintPath>
  </Reference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
